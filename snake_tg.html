@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Snake Game</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #f0f0f0;
+            margin: 0;
+        }
+        canvas {
+            border: 1px solid black;
+            background-color: #000;
+        }
+        .controls {
+            display: flex;
+            flex-direction: column;
+            margin-top: 10px;
+            align-items: center;
+        }
+        .button {
+            width: 70px;
+            height: 70px;
+            margin: 5px;
+            background-color: #ccc;
+            border: none;
+            font-size: 24px;
+        }
+        .control-buttons {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .control-row {
+            display: flex;
+        }
+        .info {
+            margin-top: 10px;
+            font-family: Arial, sans-serif;
+            font-size: 18px;
+        }
+        .game-over {
+            font-size: 24px;
+            color: red;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="400" height="400"></canvas>
+    <div class="info">
+        Score: <span id="score">0</span> | High Score: <span id="highScore">0</span>
+    </div>
+    <div class="controls">
+        <div class="control-buttons">
+            <div class="control-row">
+                <button class="button" id="up">↑</button>
+            </div>
+            <div class="control-row">
+                <button class="button" id="left">←</button>
+                <button class="button" id="down">↓</button>
+                <button class="button" id="right">→</button>
+            </div>
+        </div>
+        <button class="button" id="restart">Restart</button>
+    </div>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script>
+        Telegram.WebApp.ready();
+
+        class SnakeGame {
+            constructor(canvas, boxSize) {
+                this.canvas = canvas;
+                this.ctx = canvas.getContext("2d");
+                this.boxSize = boxSize;
+                this.highScore = localStorage.getItem('highScore') || 0;
+                this.scoreElement = document.getElementById('score');
+                this.highScoreElement = document.getElementById('highScore');
+                this.highScoreElement.textContent = this.highScore;
+                this.reset();
+                this.initControls();
+            }
+
+            reset() {
+                this.snake = [{ x: 9 * this.boxSize, y: 10 * this.boxSize }];
+                this.food = this.randomFoodPosition();
+                this.score = 0;
+                this.direction = null;
+                this.isGameOver = false;
+                this.updateScore();
+                if (this.gameInterval) {
+                    clearInterval(this.gameInterval);
+                }
+                this.gameInterval = setInterval(() => this.draw(), 100);
+            }
+
+            initControls() {
+                document.addEventListener("keydown", event => this.setDirection(event.keyCode));
+                document.getElementById("left").addEventListener("click", () => this.setDirection(37));
+                document.getElementById("up").addEventListener("click", () => this.setDirection(38));
+                document.getElementById("down").addEventListener("click", () => this.setDirection(40));
+                document.getElementById("right").addEventListener("click", () => this.setDirection(39));
+                document.getElementById("restart").addEventListener("click", () => this.reset());
+
+                Telegram.WebApp.onEvent('theme_changed', () => {
+                    this.applyTheme();
+                });
+
+                this.applyTheme();
+            }
+
+            applyTheme() {
+                const themeParams = Telegram.WebApp.themeParams;
+                document.body.style.backgroundColor = themeParams.bg_color || "#f0f0f0";
+                this.canvas.style.borderColor = themeParams.button_color || "#000";
+            }
+
+            setDirection(keyCode) {
+                if (this.isGameOver) return;
+                if (keyCode === 37 && this.direction !== "RIGHT") {
+                    this.direction = "LEFT";
+                } else if (keyCode === 38 && this.direction !== "DOWN") {
+                    this.direction = "UP";
+                } else if (keyCode === 39 && this.direction !== "LEFT") {
+                    this.direction = "RIGHT";
+                } else if (keyCode === 40 && this.direction !== "UP") {
+                    this.direction = "DOWN";
+                }
+            }
+
+            randomFoodPosition() {
+                return {
+                    x: Math.floor(Math.random() * 19 + 1) * this.boxSize,
+                    y: Math.floor(Math.random() * 19 + 3) * this.boxSize
+                };
+            }
+
+            collision(head) {
+                return this.snake.some(segment => head.x === segment.x && head.y === segment.y);
+            }
+
+            updateScore() {
+                this.scoreElement.textContent = this.score;
+                if (this.score > this.highScore) {
+                    this.highScore = this.score;
+                    localStorage.setItem('highScore', this.highScore);
+                    this.highScoreElement.textContent = this.highScore;
+                }
+            }
+
+            draw() {
+                this.ctx.fillStyle = "black";
+                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+                this.snake.forEach((segment, index) => {
+                    this.ctx.fillStyle = index === 0 ? "green" : "white";
+                    this.ctx.fillRect(segment.x, segment.y, this.boxSize, this.boxSize);
+                    this.ctx.strokeStyle = "red";
+                    this.ctx.strokeRect(segment.x, segment.y, this.boxSize, this.boxSize);
+                });
+
+                this.ctx.fillStyle = "red";
+                this.ctx.fillRect(this.food.x, this.food.y, this.boxSize, this.boxSize);
+
+                let headX = this.snake[0].x;
+                let headY = this.snake[0].y;
+
+                if (this.direction === "LEFT") headX -= this.boxSize;
+                if (this.direction === "UP") headY -= this.boxSize;
+                if (this.direction === "RIGHT") headX += this.boxSize;
+                if (this.direction === "DOWN") headY += this.boxSize;
+
+                if (headX === this.food.x && headY === this.food.y) {
+                    this.score++;
+                    this.food = this.randomFoodPosition();
+                    this.updateScore();
+                } else {
+                    this.snake.pop();
+                }
+
+                const newHead = { x: headX, y: headY };
+
+                if (headX < 0 || headY < 0 || headX >= this.canvas.width || headY >= this.canvas.height || this.collision(newHead)) {
+                    clearInterval(this.gameInterval);
+                    this.isGameOver = true;
+                    this.ctx.fillStyle = "red";
+                    this.ctx.font = "45px Changa one";
+                    this.ctx.fillText("Game Over", this.canvas.width / 4, this.canvas.height / 2);
+
+                    Telegram.WebApp.MainButton.show();
+                    Telegram.WebApp.MainButton.setText("Play Again");
+                    Telegram.WebApp.MainButton.onClick(() => {
+                        this.reset();
+                        Telegram.WebApp.MainButton.hide();
+                   
